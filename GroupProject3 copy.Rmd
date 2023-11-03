@@ -1,0 +1,215 @@
+---
+title: "GroupProject3"
+output: html_document
+date: "2023-03-27"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Business Problem
+We will be analyzing the different elements of a song (i.e. valence, acousticness, danceability, duration, energy, explicitness, instrumentalness, key, liveness, loudness, mode, speechness, and tempo) to identify which elements are most influential to the popularity of a song. This ultimately helps record companies or similar businesses in the music industry determine which elements to focus on in order to create a popular song in the future. 
+
+# Data Cleaning and Splitting
+The dataset we will be using is spotify.csv, which contains data on 170,653 songs on Spotify, one of the largest music streaming service providers with over 489 million monthly active users as of December 2022.
+
+
+We factorised all the string parameters and deleted rows that are not important for our analysis such as release date, name, id and artists because we will only be focusing on elements of a song.
+```{r, cache = TRUE}
+#Load data
+spotify <- read.csv("spotify.csv", stringsAsFactors = TRUE) 
+
+#Delete unwanted rows
+library("dplyr")
+spotify = select(spotify, -c("release_date", "name", "id", "artists"))
+summary(spotify)
+str(spotify)
+```
+
+# Split into test and train
+```{r, cache = TRUE}
+testRange = sample(1:nrow(spotify), 0.5*nrow(spotify))
+spotifyTrain = spotify[testRange, ]
+spotifyTest= spotify[-testRange, ]
+```
+
+# Linear Regression Model
+```{r, cache = TRUE}
+# Building Model
+linearMod = lm(popularity ~., data = spotifyTrain)
+summary(linearMod)
+
+# Making prediction
+library(caret)
+linearPred = predict(linearMod, spotifyTest)
+postResample(linearPred, spotifyTest$popularity)
+```
+
+# Improved Linear Regression Model
+We constructed an improved linear regression model by including only the parameters that are significant in our initial linear regression mode. As a result, we could reduce our RSME from 10.867 to 10.835, MAE from 8.029 to 8.023 and increase Rsquared from 0.7517 to 0.7532.
+```{r, cache = TRUE}
+# Building Model
+bestlinearMod = lm(popularity ~ year + explicit + danceability*energy*loudness*valence + instrumentalness + acousticness*liveness*speechiness, data = spotifyTrain)
+summary(bestlinearMod)
+
+# Making prediction
+library(caret)
+bestlinearPred = predict(bestlinearMod, spotifyTest)
+postResample(bestlinearPred, spotifyTest$popularity)
+```
+
+
+# Regression Tree Model
+We constructed a Regression Tree Model instead of a Decision Tree because our y-value, popularity, is continuous variable and not binary. 
+```{r, cache = TRUE}
+# Building Decision Tree Model
+library(rpart)
+dtModel <- rpart(popularity ~., data = spotifyTrain)
+
+# Making prediction
+library(caret)
+DTPred <- predict(dtModel, spotifyTest)
+postResample(DTPred, spotifyTest$popularity)
+```
+
+
+# Normalizing Data for KNNREG and ANN models
+```{r, cache = TRUE}
+# Normalise Data
+normalise = function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+spotifyTestNormalised = as.data.frame(lapply(spotifyTest[, -ncol(spotifyTest)], normalise))
+spotifyTrainNormalised = as.data.frame(lapply(spotifyTrain[, -ncol(spotifyTrain)], normalise))
+
+testLabel = spotifyTestNormalised$popularity
+trainLabel = spotifyTrainNormalised$popularity
+KnnTestNormalised = spotifyTestNormalised
+KnnTrainNormalised = spotifyTrainNormalised
+
+KnnTrainNormalised$popularity = NULL
+KnnTestNormalised$popularity = NULL
+```
+
+# ANN Model
+ANN performs the best among all level 1 models with the lowest RSME of 0.1077, MAE of 0.0745 and largest Rsquared of 0.7824. The predictions would be most accurate if we use ANN Model. 
+```{r, cache = TRUE}
+# Building the ANN Model
+library(neuralnet)
+annModel = neuralnet(popularity ~ ., data = spotifyTrainNormalised, hidden = 1)
+
+# Make Prediction
+library(caret)
+AnnPred = predict(annModel, spotifyTestNormalised)
+postResample(AnnPred, testLabel)
+```
+
+# KNNREG Model
+```{r, cache = TRUE}
+# Building the KNN Model
+library(class)
+library(gmodels)
+library(caret)
+KnnMod = knnreg(popularity ~., data = spotifyTrainNormalised, k = 1)
+
+# Make Prediction
+library(caret)
+KnnPred = predict(KnnMod, spotifyTestNormalised)
+postResample(KnnPred, spotifyTest$popularity)
+```
+
+# Improved KNNREG Model
+We constructed an improved knnreg model by reducing the parameters. As a result, we could reduce our RSME from 37.967 to 37.965, MAE from 31.205 to 31.204 and increase Rsquared from 0.611 to 0.776. 
+
+However, compared to other level 1 models, knnreg still has relatively higher RSME which means predictions with knnreg may not be as accurate in our analysis. 
+```{r, cache = TRUE}
+# Building the KNN Model
+library(class)
+library(gmodels)
+library(caret)
+KnnModbest = knnreg(popularity ~ year + explicit + instrumentalness , data = spotifyTrainNormalised, k = 10)
+
+# Make Prediction
+library(caret)
+KnnPred2 = predict(KnnModbest, spotifyTestNormalised)
+postResample(KnnPred2, spotifyTest$popularity)
+```
+
+# Random Forest Model
+```{r, cache = TRUE}
+#Building Random Forest Model 
+library(randomForest)
+library(janitor)
+spot_train_clean = clean_names(spotifyTrain)
+spot_test_clean = clean_names(spotifyTest)
+rmModel = randomForest(trainLabel ~., data = spot_train_clean)
+
+#Make Prediction
+library(caret)
+rmPred = predict(rmModel, spot_test_clean)
+postResample(rmPred, spotifyTest$popularity)
+```
+
+
+# Improved Random Forest Model
+We constructed an improved random forest model by increasing the number of ntrees. As a result, we could reduce our RSME from 37.9405475 to 37.9405202, MAE from 31.1946750 to 31.1946587 and increase Rsquared from 0.9995 to 0.9996. 
+
+
+However, compared to other level 1 models, random forest still has relatively higher RSME which means predictions with this model may not be as accurate in our analysis. 
+```{r, cache = TRUE}
+#Building Random Forest Model 
+library(randomForest)
+library(janitor)
+spot_train_clean = clean_names(spotifyTrain)
+spot_test_clean = clean_names(spotifyTest)
+rmModelbest = randomForest(trainLabel ~., data = spot_train_clean, ntree = 1200)
+
+#Make Prediction
+library(caret)
+rmPredbest = predict(rmModelbest, spot_test_clean)
+postResample(rmPredbest, spotifyTest$popularity)
+```
+
+#Combined Data Frame
+We combined all the level 1 model predictions and the test label into a new data frame to build our stacked regression tree model.
+```{r, cache = TRUE}
+combinedDf = data.frame(bestlinearPred, DTPred, AnnPred, KnnPred2, rmPredbest, testLabel)
+```
+
+#Split into test and train Model
+```{r, cache = TRUE}
+ctestRange = sample(1:nrow(combinedDf), 0.7*nrow(combinedDf))
+combinedspotifyTrain = spotify[ctestRange, ]
+combinedspotifyTest= spotify[-ctestRange, ]
+```
+
+
+#Second-level Regression Tree Model
+```{r, cache = TRUE}
+# Building Decision Tree Model
+library(rpart)
+comdtModel <- rpart(popularity ~., data = combinedspotifyTrain)
+
+# Making prediction
+library(caret)
+CDTPred <- predict(comdtModel, combinedspotifyTest)
+postResample(CDTPred, combinedspotifyTest$popularity)
+```
+
+#Analysis
+Our second-level regression tree model has a better performance than most of our level 1 models such as random forest and knnreg with a RSME of 13.88, MAE of 10.969 and Rsquared of 0.7503. 
+
+However, the best performing model is still the ANN model with a much lower RSME of 0.1088, MAE of 0.0798 and Rsquared of 0.756. Thus, for the most accurate prediction of the elements that are most important in a popular song, it would be ideal to use ANN Model. 
+
+Using the Ann Model below, the predictors that are most important in determining the popularity of a song include:
+
+1. year
+2. loudness
+3. danceability 
+4. explicit
+5. valence
+6. key 
+```{r}
+plot(annModel, hidden = 5)
+```
