@@ -1,0 +1,371 @@
+---
+title: "Group Project 2 Telemarketing"
+author: "Xinyang Zhou, Lim Jia Ying Jermaine, Hay Man Hnin Lwin, Vania Rohmetra"
+date: "3/22/2020"
+output:
+  html_document:
+    toc: true
+    theme: readable
+    highlight: tango
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Downloading and Prepping the Data
+
+```{r}
+#Downloading and Prepping the Data
+tele <- read.csv("tele.csv", stringsAsFactors = TRUE)
+summary(tele)
+
+#We are deleting the "duration" variable because it is an after the fact measurement. We only should be using variables that we know before the call
+tele$duration <- NULL
+
+# Deleting the column X
+tele$X <- NULL
+
+# Changing pdays to a dummy and deleting pdays
+tele$pdaysdummy <- ifelse(tele$pdays == 999, 0, 1)
+tele$pdays <- NULL
+
+str(tele)
+```
+
+## Getting Data Ready for Analysis
+
+```{r}
+# Using model.matrix to convert all the factors to dummy variables
+# We are converting all of the factors into dummy variables as the input into knn has to be numeric
+telemm <- as.data.frame(model.matrix(~.-1.,tele))
+str(telemm)
+
+# Randomize the rows in the data (shuffling the rows)
+set.seed(12345)
+tele_random <- telemm[sample(nrow(telemm)),]
+
+#Normalize the data
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x)))
+}
+
+# we are going to normalize everything 
+tele_norm <- as.data.frame(lapply(tele_random, normalize))
+```
+
+
+## Getting Train and Test Samples
+
+```{r}
+# Selects 10000 random rows for test data
+set.seed(12345)
+test_set <- sample(1:nrow(tele_norm), 10000) 
+# Depending on R-version and computer, different rows may be selected. 
+# If that happens, results are different. 
+
+# Create a train set and test set
+#First the predictors - all columns except the yyes column
+tele_train <- tele_norm[-test_set, -match("yyes",names(tele_norm))]
+tele_test <- tele_norm[test_set, -match("yyes",names(tele_norm))]
+
+#Now the response (aka Labels) - only the yyes column
+tele_train_labels <- tele_norm[-test_set, "yyes"]
+tele_test_labels <- tele_norm[test_set, "yyes"]
+
+```
+
+> Now you are ready to build your ANN model. Feel free to modify the data load, cleaning and preparation code above as per your preference.
+
+# ANN Model
+
+## Initial ANN model
+### In this section, we are first building and plotting our initial ANN model. We then evaluated the predictive performance of the initial model, to compare against our best model. This eventually allows us to deduce if our best model is truly an improved version of the initial model.  
+
+```{r}
+# We are building the initial ANN model.
+library(neuralnet)
+babymodel <- neuralnet(tele_train_labels ~ ., data = tele_train)
+```
+
+```{r}
+#We are plotting our initial ANN model
+plot(babymodel, rep = "best")
+```
+
+```{r}
+# We are evaluating the predictive performance of our initial model.
+b_pred <- predict(babymodel, tele_test)
+b_pred1 <- ifelse(b_pred >= 0.5, 1, 0)
+```
+
+```{r}
+# We are presenting the results of the initial model's predictive performance in a cross table for better visualization.
+library(caret)
+library(gmodels)
+CrossTable(b_pred1, tele_test_labels)
+```
+
+## Best ANN model
+### In this section, we are building our best ANN model by increasing the number of hidden layers from 0 (in the initial model) to 5. By doing so, we turn the Perceptron into a universal approximator, allowing it to capture and reproduce extremely complex input–output relationships. This could potentially improve the performance of the initial ANN model in our case, since we are dealing with a large number of input variables.  
+```{r}
+# We are building the best ANN model.
+library(neuralnet)
+model = neuralnet(
+    tele_train_labels ~ .,
+data = tele_train,
+hidden=5,
+linear.output = FALSE
+)
+```
+
+```{r}
+# We are plotting the best ANN model.
+plot(model,rep = "best")
+```
+
+```{r}
+# We are testing the performance of our best ANN model. 
+library(caret)
+pred <- predict(model, tele_test)
+ann_predictions <- ifelse(pred >= 0.5, 1, 0)
+```
+
+```{r}
+# We are presenting the results of our best model's prediction performance in a cross table for better visualization. 
+library(caret)
+library(gmodels)
+CrossTable(ann_predictions, tele_test_labels)
+```
+
+## Results for ANN model
+### In this section, we obtain the sensitivity for both our initial ANN model as well as our best ANN model by using the formula: Sensitivity = True Positive / (True Positive + False Negative).
+```{r}
+# Sensitivity of our best model: 237/1149 = 0.206
+# Sensitivity of our initial model: 255/1149 = 0.222
+### Note: Numbers are rounded off to 3 significant figures
+```
+
+## Conclusion for ANN model
+### In this section, we deduce which ANN model (initial or best) to use to quantify the losses/ profits from using a model to make calls, before calculating the actual amount of profits/ losses, to determine if the company should be using the predictive model in their daily operations.
+```{r}
+# From the results above, our initial model has higher sensitivity than the best model. Therefore, we will use the initial model to quantify profits.
+
+## Assuming that we get the following (in dollar units):
+### 1) -1+6 = +5 for each true positive prediction
+### 2) +1 for each true negative prediction
+### 3) +1-6 = -5 for each false negative prediction
+### 4) -1 for each false positive prediction
+
+## Then, without the model, we will be calling everyone and the expected profit/loss is (10000 x -1) + (1149 x 6) = -3106
+## However, With the model, we will make calls that we predict to be successful, and the expected profit/loss is (8719 x 1) + (132 x -1) + (894 x -5) + (255 x 5) = 5392
+
+# If we do not consider the opportunity cost, we can earn:
+# 387 x -1 + 255 x 6 = 1143
+
+# 1143 - (-3106) = 4249
+
+## Therefore, the company will effectively be earning $4249 more by making calls based on our ANN model's predictions, indicating that they should use the ANN model in their daily operations.
+```
+
+
+# KNN Model
+
+## Importing libraries
+```{r}
+library(class)
+library(gmodels)
+library(caret)
+```
+
+## Running Initial KNN model and getting statistics
+```{r}
+init_telepredKNN = knn(tele_train, tele_test, cl = tele_train_labels, k = 1)
+
+CrossTable(init_telepredKNN, tele_test_labels)
+
+confusionMatrix(as.factor(init_telepredKNN), as.factor(tele_test_labels), positive ="1")
+
+```
+## Running Best KNN model and getting statistics
+```{r}
+telepredKNN = knn(tele_train, tele_test, cl = tele_train_labels, k = 3)
+
+CrossTable(telepredKNN, tele_test_labels)
+
+confusionMatrix(as.factor(telepredKNN), as.factor(tele_test_labels), positive ="1")
+```
+
+
+## Conclusion for KNN model
+
+When running our KNN model, we tried several values for k. We first narrowed down that we wanted to use an odd number for the k value, so that it can break ties and give a final prediction. After we decided that, we ran the knn model with several different k values starting with 1 until 21.
+
+We knew before starting the models that the best k value for us will be a smaller number because there are not that many successful calls. Since what we really want for the telecommunications company is to maximize the number of successful calls and minimize the number of calls that would have been successful but didn't happen, we decided that we will use the k value that gives us the highest profit (profit = revenue - costs).
+
+We realized that having a k value of 1 gives our model the highest sensitivity of 0.3168, and that decreases if we increase the k value. However, the profit from our initial model with k = 1 was less than the profit from k = 3. After the value of k = 3, the profit started to decrease again. Therefore, our best model was when k = 3.
+
+## Conclusion for KNN model
+From the results above, we will quantify profits for the company.
+
+Assuming that we get the following (in dollar units):
+1) -1+6 = +5 for each true positive prediction
+2) +1 for each true negative prediction
+3) +1-6 = -5 for each false negative prediction
+4) -1 for each false positive prediction
+
+Without our models, we will be calling everyone and the expected profit/loss is (10000 x -1) + (1149 x 6) = -3106.
+
+However, with the best model, we will make calls that we predict to be successful, and the expected profit/loss is (8508 x 1) + (343 x -1) + (830 x -5) + (319 x 5) = 5610.
+
+If we do not account for the opportunity cost, this is the money we can get if we trust the KNN model:
+(662 x -1) + (319 x 6) = 1252.
+
+We are getting 1252 - (-3106) = 4358 more compared to the case when we do not use the KNN model.
+
+Therefore, the company will effectively be earning $5610 more by making calls based on our KNN model's predictions after accounting for the opportunity cost of calls that could have been successful but were not made, as well as calls that would have costed the company 1 dollar that were not made. The company can earn 4358 dollars more after applying the KNN model. 
+
+
+# Logistic Model
+
+## Data cleaning
+```{r}
+tele <- read.csv("tele.csv")
+tele$duration <- NULL
+tele$X <- NULL
+tele$campaign <- NULL
+tele$default <- NULL
+
+#Making the y a dummy variable 
+tele$y = ifelse(tele$y == "yes", 1, 0)
+
+#Factoring out the columns with characters
+tele$job <- as.factor(tele$job)
+tele$marital <- as.factor(tele$marital)
+tele$education <- as.factor(tele$education)
+tele$previous <- as.factor(tele$previous)
+tele$pdays <- as.factor(tele$pdays)
+tele$housing <- as.factor(tele$housing)
+tele$loan <- as.factor(tele$loan)
+tele$contact <- as.factor(tele$contact)
+tele$month <- as.factor(tele$month)
+tele$day_of_week <- as.factor(tele$day_of_week)
+tele$poutcome <- as.factor(tele$poutcome)
+tele$nr.employed <- as.factor(tele$nr.employed)
+
+tele$pdaysdummy <- ifelse(tele$pdays == 999, 0, 1)
+tele$pdays <- NULL
+tele$previous = NULL
+str(tele)
+```
+
+## Getting Train and Test Samples
+```{r}
+set.seed(12345)
+test_set <- sample(1:nrow(tele_norm), 10000) 
+tele_train <- tele[-test_set, ]
+tele_test <- tele[test_set, ]
+```
+
+## Deciding our metric
+We will be building logistics regression models to predict the successful calls rate. However, before that, we would analyse  which metrics we are using to measure how good our model is performing. We have come up with 4 possible calls situations: 
+
+1. True positive - when our model predict a successful call, so we called and in actual, it is also  successful
+
+2. True negative - when our model predict a failed call, so we did not call and in actual, it is also not successful
+
+3. False positive - when our model predict a successful call, so we called but in actual, it is not successful
+
+4. False negative - when our model predict a failed call, so we did not call but in actual, it is successful
+
+From the above 4, it is obvious to us that false positive and false negatives would pose loss to our company. Thus, we analyse whether false positive or false negative is more detrimental. We assume that the company gain the calling cost of $1 if the call was not made. 
+
+For each false negative, we will incur loss of +1-6 = -$5
+For each false positive, we will incur loss of -$1 
+From the calculation above, it seems that false negative is more damaging. 
+Thus, from now on, we will be using sensitivity to measure how good our model is. 
+
+## Building Initial Logistics Regression Model
+```{r, cache=TRUE}
+tlmod <- glm(y ~ ., data = tele_train, family="binomial")
+```
+
+## Prediction with Initial Logistics Regression Model
+```{r, cache=TRUE}
+callPrediction = predict(tlmod, newdata = tele_test)
+knn_predictions <- ifelse(callPrediction >= 0.1, "1", "0")
+
+library(gmodels)
+CrossTable(knn_predictions, tele_test_labels)
+```
+
+## Building Best Logistics Regression Model
+```{r, cache=TRUE}
+bestmod <- glm(y ~ . + (job * loan) + (education * marital) + (housing * month) * (job * housing), data = tele_train, family="binomial")
+```
+
+## Prediction with Best Logistics Regression Model
+```{r, cache=TRUE}
+newCallPrediction = predict(bestmod, newdata = tele_test)
+new_logistic_pred <- ifelse(newCallPrediction >= 0.1, "1", "0")
+
+library(gmodels)
+CrossTable(new_logistic_pred, tele_test_labels)
+```
+
+## Testing sensitivity
+From the matrices above, our best model has higher sensitivity of 0.02. A higher sensitive is important because with more correct positive predictions, the company would not be spending time and money on calls that are less likely to be successful. 
+
+To further prove the usefulness of our model, we would like to quantify the profits form using our model.
+
+Assuming, we get 
+
+1. -1+6 = 5 for each true positive prediction 
+
+2. +1 for each true negative prediction
+
+3. +1-6 = -5 for each false negative prediction
+
+4. -1 for each false positive prediction
+
+Without the model, we will be calling everyone and the expected profit/loss is 
+(10000 x -1) + (1149 x 6) = -3106
+
+With the model, we will be only calling those that we predict as successful and the expected profit/loss is (8464 x 1) + (387 x -1) + (1099 x -5) + (50 x 5) = 2832, when considering the opportunity cost.
+
+If we do not consider the opportunity cost, we will earn:
+437 x -1 + 50 x 6 = -137
+
+-137 - (-3106) = 2969
+
+The company will be earning $2969 more with our prediction model.
+
+
+# Combined Model
+```{r}
+combined_prediction = as.numeric(telepredKNN) + as.numeric(ann_predictions) + as.numeric(new_logistic_pred)
+final_decision = ifelse(combined_prediction>=2, "1", "0")
+
+confusionMatrix(as.factor(final_decision), as.factor(tele_test_labels), positive = "1")
+CrossTable(final_decision, tele_test_labels)
+```
+
+Without the model, we will be calling everyone and the expected profit/loss is -1 x 10000 + 6 x 1149 = -3106.
+
+With the model, we will be only calling those that we predict as successful and the expected profit/loss is 2919 x -1 + 784 x 6 = 1785.
+
+Hence, we will saving 1785 - (-3106) = $4891 after using our combined model. 
+
+If we consider the opportunity cost:
+6716 x 1 + 2135 x -1 + 365 x -5 + 784 x 5 = 6676.
+
+
+# Final Conclusion
+
+After having each three models and the final combined model, we decide to go with the combined model. As the combined version of ANN, KNN, and the logistic model, the combined model will naturally become the most robust one, increasing the possibility of predicting the true client responses. In addition, if we look at the money we earned more, we will see the performance of the combined model do ends up having the highest profit increase among all.
+
+The combined model should be implemented to the company as it provides more profit to the firm and will alleviate the call center's work load, potentially leading to another increase in profit by hiring less call center agents.  
+
+
+
