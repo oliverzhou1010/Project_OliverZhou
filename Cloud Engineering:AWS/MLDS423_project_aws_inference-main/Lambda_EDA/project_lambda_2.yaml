@@ -1,0 +1,102 @@
+# This AWS SAM template has been generated from your function's configuration. If
+# your function has one or more triggers, note that the AWS resources associated
+# with these triggers aren't fully specified in this template and include
+# placeholder values. Open this template in AWS Application Composer or your
+# favorite IDE and modify it to specify a serverless application with other AWS
+# resources.
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: An AWS Serverless Application Model template describing your function.
+Resources:
+  projectlambda2:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Description: ''
+      MemorySize: 128
+      Timeout: 3
+      Architectures:
+        - arm64
+      EphemeralStorage:
+        Size: 512
+      EventInvokeConfig:
+        MaximumEventAgeInSeconds: 21600
+        MaximumRetryAttempts: 2
+      ImageUri: >-
+        aws.accout.dkr.ecr.aws.region.amazonaws.com/breast-cancer-analysis_ecr@sha256:efbb5400e922bd03b466041cd729da416c98545d0f298529591690f0dd91c72a
+      PackageType: Image
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - autoscaling:Describe*
+                - cloudwatch:*
+                - logs:*
+                - sns:*
+                - iam:GetPolicy
+                - iam:GetPolicyVersion
+                - iam:GetRole
+                - oam:ListSinks
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - iam:CreateServiceLinkedRole
+              Resource: >-
+                arn:aws:iam::*:role/aws-service-role/events.amazonaws.com/AWSServiceRoleForCloudWatchEvents*
+              Condition:
+                StringLike:
+                  iam:AWSServiceName: events.amazonaws.com
+            - Effect: Allow
+              Action:
+                - oam:ListAttachedLinks
+              Resource: arn:aws:oam:*:*:sink/*
+            - Effect: Allow
+              Action:
+                - s3:*
+                - s3-object-lambda:*
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+              Resource: arn:aws:logs:aws.account:aws.accout:*
+            - Effect: Allow
+              Action:
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource:
+                - >-
+                  arn:aws:logs:aws.account:aws.account:log-group:/aws/lambda/project_lambda_2:*
+      SnapStart:
+        ApplyOn: None
+      Events:
+        BucketEvent1:
+          Type: S3
+          Properties:
+            Bucket:
+              Ref: Bucket1
+            Events:
+              - s3:ObjectCreated:*
+  Bucket1:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+  BucketPolicy1:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: Bucket1
+      PolicyDocument:
+        Statement:
+          - Action: s3:*
+            Effect: Deny
+            Principal: '*'
+            Resource:
+              - arn:aws:s3:::Bucket1/*
+              - arn:aws:s3:::Bucket1
+            Condition:
+              Bool:
+                aws:SecureTransport: false
