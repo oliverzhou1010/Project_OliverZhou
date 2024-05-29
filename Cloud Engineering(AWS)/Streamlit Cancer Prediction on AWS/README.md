@@ -1,6 +1,6 @@
 # Breast Cancer: Prediction and Visualization via AWS platform
 
-Authors: Jason Huang, Wesley Wang, Siyan Li, Oliver Zhou
+Authors: Jason Huang, Wesley Wang, Siyan Li, Xinyang (Oliver) Zhou
 
 Date: Spring 2024
 
