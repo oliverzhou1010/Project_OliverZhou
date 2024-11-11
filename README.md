@@ -6,7 +6,7 @@
 
 💻 For more information about me, please visit: https://www.mccormick.northwestern.edu/machine-learning-data-science/people/students/class-of-2024/zhou-xinyang.html.
 
-🪪 For my LinkedIn: https://www.linkedin.com/in/xinyang-zhou-45b95a218/. Please, feel free to send me messages on LinkedIn or via email for any questions!
+🪪 For my LinkedIn: https://www.linkedin.com/in/oliverzhou-data-science-analytics/. Please, feel free to send me messages on LinkedIn or via email for any questions!
 
 Thank you!
 
